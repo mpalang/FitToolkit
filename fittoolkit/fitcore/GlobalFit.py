@@ -11,13 +11,10 @@ Z: Data Values as 2D array with shape (len(WL),len(dt))
 """
 import numpy as np
 from numpy.linalg import inv
-
 from iminuit import Minuit as Mi
 
-from collections import Counter
 
-
-class global_fit:
+class GlobalFit:
     """
     Creactes global fit Object to fit 2D spectroscopic Data and return DADS.
     Possible Fit Methods:
