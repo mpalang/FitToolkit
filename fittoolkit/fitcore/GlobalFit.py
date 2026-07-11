@@ -13,7 +13,6 @@ import numpy as np
 from numpy.linalg import inv
 from iminuit import Minuit as Mi
 
-
 class GlobalFit:
     """
     Creactes global fit Object to fit 2D spectroscopic Data and return DADS.
@@ -56,9 +55,7 @@ class GlobalFit:
     # =============================================================================
     def standard_set(self):
         """
-        Returns
-        -------
-        None.
+        Default settings.
 
         """
         self.set={
@@ -69,14 +66,17 @@ class GlobalFit:
                 'p_lower':[], #is a list of tuples of lower boundaries. Can be None.
                 'p_upper':[], #is a list of tuples of upper boundaries. Can be None.
                 'common_parms': [], # Tuple of parm names that are common between different functions.
-                'method': None,
+                'method': 'Powell', # 'migrad','L-BFGS-B','TNC','COBYLA','SLSQP','trust-constr','CG','Powell','BFGS',
                 'scan': False,
-                'tol':1e-3,
+                'simplex': False,
+                'hesse': False,
+                'tol':None,
                 'errors':None,
-                'strategy':None,
-                'print_level':None,
-                'iterations':2,
+                'strategy':None, # 
+                'print_level':0,
+                'iterations':7,
                 'fixed DADS': False,
+                'scale': False,
                     }
 
     def pack_fit_parms(self):
@@ -130,34 +130,34 @@ class GlobalFit:
             raise ValueError()
         
         # bring parameters to same magnitude for better fit:
-        scaling_factors=[]
-        self.p0 = list(self.p0)
-        self.p_lower = list(self.p_lower)
-        self.p_upper = list(self.p_upper)
+        self.scaling_factors=[1]*len(self.p0)
+
         
-        for n,parm in enumerate(self.p0):
-            factor = 10**(-np.floor(np.log10(np.abs(parm))))
-            if factor and not np.isinf(factor):
-                scaling_factors.append(factor)
-            else:
-                scaling_factors.append(1)
-            self.p0[n] = self.p0[n]*scaling_factors[n]
-            self.p_lower[n] = self.p_lower[n]*scaling_factors[n]
-            self.p_upper[n] = self.p_upper[n]*scaling_factors[n]
+        if self.set['scale']:
+            self.p0 = list(self.p0)
+            self.p_lower = list(self.p_lower)
+            self.p_upper = list(self.p_upper)
+            for n,parm in enumerate(self.p0):
+                factor = 10**(-np.floor(np.log10(np.abs(parm))))
+                if factor and not np.isinf(factor):
+                    self.scaling_factors[n] = factor
+                    self.p0[n] = self.p0[n]*self.scaling_factors[n]
+                    self.p_lower[n] = self.p_lower[n]*self.scaling_factors[n]
+                    self.p_upper[n] = self.p_upper[n]*self.scaling_factors[n]
         
-        self.scaling_factors = tuple(scaling_factors)
+            self.scaling_factors = tuple(self.scaling_factors)
         
-        self.p0 = tuple(self.p0)
-        self.p_lower = tuple(self.p_lower)
-        self.p_upper = tuple(self.p_upper)
-    
+            self.p0 = tuple(self.p0)
+            self.p_lower = tuple(self.p_lower)
+            self.p_upper = tuple(self.p_upper)
+        
 
     # =============================================================================
     # Actual Fit Function
     # =============================================================================
     def fit(self,**set_update):
         # =============================================================================
-        # define chi2 function
+        # define local functions:
         # ============================================================================= 
         def getelements(L,indices):
             return [l for n,l in enumerate(L) if n in indices]
@@ -186,51 +186,69 @@ class GlobalFit:
         D = make_D(*self.p0)
         if self.set['fixed DADS']:
             DADS = self.set['fixed DADS']
+        else:
+            DADS = make_DADS(self.Z,D)
 
+        def chi2(*p):
+            D = make_D(*p)
+            Zfit = DADS@D
+            deviation = np.nansum((self.Z-Zfit)**4) # why not use chi4 instead of chi2??
+            return deviation 
+        
+        # =============================================================================
+        # create Minuit object and set fit settings            
+        m=Mi(chi2, **fit_dict, name=self.parm_names)
+        for n,p in enumerate(self.parm_names):
+            m.limits[p]=(self.p_lower[n],self.p_upper[n])
+        if self.set['errors']:
+            m.errors=self.set['errors']
+        if self.set['tol']:
+            m.tol=self.set['tol']
+        if self.set['strategy']:
+            m.strategy=self.set['strategy']
+        if self.set['print_level']:
+            m.print_level=self.set['print_level']
+            
+        if self.set['simplex']:
+            print('running simplex')
+            m.simplex()
+            
         # =============================================================================
         #  Start Fit:
         # =============================================================================
         print('==================================\n'+'Starting Fit'+'\n==================================')  
-
+        self.deviation = [] # create list so you can follow the error throughout the iterations.
         for iteration in range(self.set['iterations']):
             #---------------------
             #Start Iterations  
-            print(f'Iteration {iteration}')
-            
-            def chi2(*p):
-                D = make_D(*p)
-                if not self.set['fixed DADS']:
-                    DADS = make_DADS(self.Z,D)
-                Zfit = DADS@D
-                self.chi2 = np.nansum((self.Z-Zfit)**2)
-                return self.chi2
-
-            # =============================================================================
-            # create Minuit object and set fit settings            
-            m=Mi(chi2, **fit_dict, name=self.parm_names)
-            for n,p in enumerate(self.parm_names):
-                m.limits[p]=(self.p_lower[n],self.p_upper[n])
-            if self.set['errors']:
-                m.errors=self.set['errors']
-            if self.set['tol']:
-                m.tol=self.set['tol']
-            if self.set['strategy']:
-                m.strategy=self.set['strategy']
-            if self.set['print_level']:
-                m.print_level=self.set['print_level']
+            if self.set['print_level']>-1:
+                print(f'Iteration {iteration+1}')
             
             # =============================================================================
             # Run Fit
-            if self.set['method']:
+            if self.set['method']=='migrad':
+                # print('running migrad')
+                m.migrad() 
+            elif self.set['method']:
+                # print(f"running {self.set['method']}")
                 m.scipy(self.set['method'])
-            else:
-                m.migrad()  
+ 
+            if self.set['hesse']:
+                # print('calculating hesse')
+                m.hesse()
 
             # =============================================================================
             # Update Data for next iteration
             fit_dict = dict(zip(self.parm_names,list(m.values)))
-
-            print(self.chi2)
+            D = make_D(*m.values)
+            if self.set['fixed DADS']:
+                DADS = self.set['fixed DADS']
+            else:
+                DADS = make_DADS(self.Z,D)
+            deviation = chi2(*m.values)
+            self.deviation.append(deviation)
+            if self.set['print_level']>0:
+                print(f'Chi2: {deviation}')
         
         #-------------------
         #End Iterations Loop. Unpack results.      
@@ -260,8 +278,9 @@ class GlobalFit:
         # =============================================================================
         # print Results
         # =============================================================================      
-        print(m.params)
-        print(m.fmin)
+        if self.set['print_level']>0:
+            print(m.params)
+            print(m.fmin)
         
 
         

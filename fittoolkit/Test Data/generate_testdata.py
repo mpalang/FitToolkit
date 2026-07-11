@@ -9,6 +9,9 @@ import numpy as np
 from matplotlib import pyplot as plt
 from scipy.special import erf
 from scipy.signal import convolve
+from numpy.linalg import inv
+from auxiliary import FitFunctions
+ffed = FitFunctions().funs['exp_decay']
 
 def gauss(x,x0,A,FWHM): #normalized to 1 for IRF
     s=FWHM/(2*np.sqrt(2*np.log(2)))
@@ -32,8 +35,6 @@ def exp_decay_conv_gauss(t,t0,A,tau,FWHM):
     y=(A/2)*y1*(1+y2) 
     return y
 
-
-
 x = np.linspace(-10,300,3000)
 y = np.linspace(300,800,1000)
 
@@ -53,6 +54,21 @@ D = D+np.random.uniform(-0.01,0.01,D.shape)
 Z = DADS@D.T
 
 #%
+def make_DADS(Z,D):
+    G = D@D.T
+    if np.isclose(np.linalg.det(G),0):
+        G = G+1e-12*np.eye(*G.shape)
+        DADS=(Z@D.T)@(inv(G))
+    else:
+        DADS=(Z@D.T)@(inv(G))
+    return DADS
+
+# Check with functions from FitFunctions object
+D1 = ffed.func(x,-5,1,1200)
+D2 = ffed.func(x,-5,2,14)
+D3 = ffed.func(x,-5,0.5,3000)
+D = np.column_stack((D1,D2,D3))
+re_DADS = make_DADS(Z,D.T)
 
 fig,ax = plt.subplots()
 ax.axhline(0,color='k',linewidth=1)
@@ -60,11 +76,18 @@ ax.plot(y,DADS[:,0])
 ax.plot(y,DADS[:,1])
 ax.plot(y,DADS[:,2])
 
-levels = np.linspace(-0.006,0.004,20)
-fig,ax = plt.subplots()
-ax.contourf(y,x,Z.T,levels=levels)
+ax.plot(y,re_DADS[:,0],':')
+ax.plot(y,re_DADS[:,1],':')
+ax.plot(y,re_DADS[:,2],':')
 
-np.savetxt('signal.txt',Z)
-np.savetxt('t.txt',x)
-np.savetxt('wl.txt',y)
+
+
+# levels = np.linspace(-0.006,0.004,20)
+# fig,ax = plt.subplots()
+# ax.contourf(y,x,Z.T,levels=levels)
+
+
+# np.savetxt('signal.txt',Z)
+# np.savetxt('t.txt',x)
+# np.savetxt('wl.txt',y)
 
