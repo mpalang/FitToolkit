@@ -13,6 +13,15 @@ import numpy as np
 from numpy.linalg import inv
 from iminuit import Minuit as Mi
 
+from dataclasses import dataclass
+
+@dataclass
+class FitProgress:
+    iteration: int
+    total_iterations: int
+    chi2: float
+    parameters: dict
+
 class GlobalFit:
     """
     Creactes global fit Object to fit 2D spectroscopic Data and return DADS.
@@ -23,8 +32,9 @@ class GlobalFit:
     # =============================================================================
     #     Initialize the global_fit object
     # =============================================================================   
-    def __init__(self,x,y,Z,name="Data",settings=None):
+    def __init__(self,x,y,Z,name="Data",settings=None,callback=None):
         
+        self.callback = callback
         self.set={}
         self.standard_set()
         if settings:
@@ -210,18 +220,25 @@ class GlobalFit:
             m.print_level=self.set['print_level']
             
         if self.set['simplex']:
-            print('running simplex')
+            if self.set['print_level']>-1:
+                if self.callback:
+                    self.callback('running simplex')
             m.simplex()
             
         # =============================================================================
         #  Start Fit:
         # =============================================================================
-        print('==================================\n'+'Starting Fit'+'\n==================================')  
+        if self.callback:
+            self.callback('================\n'+'||Starting Fit||'+'\n================')
+        print('================\n'+'||Starting Fit||'+'\n================')
+        
         self.deviation = [] # create list so you can follow the error throughout the iterations.
         for iteration in range(self.set['iterations']):
             #---------------------
             #Start Iterations  
             if self.set['print_level']>-1:
+                if self.callback:
+                    self.callback(f'Iteration {iteration+1}')
                 print(f'Iteration {iteration+1}')
             
             # =============================================================================
@@ -249,6 +266,10 @@ class GlobalFit:
             self.deviation.append(deviation)
             if self.set['print_level']>0:
                 print(f'Chi2: {deviation}')
+            if self.callback:
+                fp = FitProgress(iteration=iteration,total_iterations=self.set['iterations'],
+                            chi2=deviation,parameters=m.values)
+                self.callback(fp)
         
         #-------------------
         #End Iterations Loop. Unpack results.      
@@ -281,7 +302,10 @@ class GlobalFit:
         if self.set['print_level']>0:
             print(m.params)
             print(m.fmin)
-        
+            if self.callback:
+                self.callback(f'{m.params}')
+                self.callback(f'{m.fmin}')
+    
 
         
     # =============================================================================
