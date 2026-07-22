@@ -28,6 +28,9 @@ class GlobalFit:
     Possible Fit Methods:
         'L-BFGS-B','TNC','COBYLA','SLSQP','trust-constr','CG','Powell','BFGS',
         #Additional Information required: 'trust-krylov','trust-ncg','dogleg','Newton-CG','trust-exact'
+    
+    callback: function that handles progres update in form of FitProgress object.
+    
     """   
     # =============================================================================
     #     Initialize the global_fit object
@@ -229,16 +232,13 @@ class GlobalFit:
         #  Start Fit:
         # =============================================================================
         if self.callback:
-            self.callback('================\n'+'||Starting Fit||'+'\n================')
-        print('================\n'+'||Starting Fit||'+'\n================')
+            self.callback('start fit')
         
         self.deviation = [] # create list so you can follow the error throughout the iterations.
         for iteration in range(self.set['iterations']):
             #---------------------
             #Start Iterations  
             if self.set['print_level']>-1:
-                if self.callback:
-                    self.callback(f'Iteration {iteration+1}')
                 print(f'Iteration {iteration+1}')
             
             # =============================================================================
