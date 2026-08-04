@@ -55,6 +55,9 @@ class GlobalFit:
                  settings:dict|None = None, name:str="Data", callback:Callable|None=None#Optional
                  ):
 
+        self.error_log = []
+        self.nfcn = 0
+
         #Declarations:
         if callback:
             self.callback = callback
@@ -180,11 +183,11 @@ class GlobalFit:
 
 
     def get_goodness(self,chi2):
-        return chi2/sum(self.Z**2)
+        return float(chi2/np.sum(self.Z**2))
 
 
     def pack_parameters(self,fit_parms):
-        "Creates opt_parms attribute with original structure."
+        "Creates optimized parameters (opt_parms) attribute with original structure."
         self.fit_parms = fit_parms
         self.opt_parms = {}
         for fun,parms in self.parms.items():
@@ -221,6 +224,8 @@ class GlobalFit:
             return D
 
         def make_DADS(Z,D):
+            # Try new approach:
+            # return np.linalg.lstsq(D.T, Z.T, rcond=None)[0].T
             if self.set['fixed_DADS']:
                 return self.set['fixed_DADS']
             else:
@@ -232,17 +237,25 @@ class GlobalFit:
                     DADS=(Z@D.T)@(inv(G))
                 return DADS
 
-        def chi2(*p):
+        def calc_chi2(*p):
             D = make_D(*p)
+            if not np.isfinite(D).all():
+                p_str = ', '.join(f'{n}={v:.3g}' for n, v in zip(parm_names, p))
+                self.error_log.append(f'Non-finite D matrix encountered for parameters: {p_str}')
             DADS = make_DADS(self.Z,D)
             Zfit = DADS@D
-            deviation = np.nansum((self.Z-Zfit)**2)
-            return deviation 
+            _chi2 = np.nansum((self.Z-Zfit)**2)
+            if not np.isfinite(_chi2):
+                self.error_log.append(f'Non-finite chi2 encountered for parameters: {p_str} -> {_chi2:.3g}')
+                return 2*chi2
+            else:
+                chi2 = _chi2
+                return chi2
         
         # =============================================================================
         # create Minuit object and set fit settings   
         p0 = tuple(fit_parms[name] for name in parm_names)        
-        m=Mi(chi2, *p0, name=parm_names)
+        m=Mi(calc_chi2, *p0, name=parm_names)
         if self.bounds:
             for name,bound in self.fit_bounds.items():
                 m.limits[name] = bound
@@ -286,16 +299,21 @@ class GlobalFit:
             # =============================================================================
             # Update Data for next iteration
             fit_parms = dict(zip(parm_names,list(m.values)))
+            bad = {k: type(v).__name__ for k, v in fit_parms.items()
+                    if not isinstance(v, (int, float, np.floating))}
+            if bad:
+                raise TypeError(f"non-numeric fit parameters: {bad}")
             D = make_D(*m.values)
             DADS = make_DADS(self.Z,D)
-            goodness = self.get_goodness(chi2(*m.values))
+            goodness = self.get_goodness(calc_chi2(*m.values))
             self.goodness.append(goodness)
             if self.set['print_level']>0:
-                print(f'Goodness of fit: {goodness:.3e}')
+                print(f'Goodness of fit: {goodness:.3g}')
             if self.callback:
-                fp = FitProgress(iteration=iteration,total_iterations=self.set['iterations'],
-                            chi2=chi2(*m.values),parameters=m.values)
-                self.callback(fp)
+                report = f'Iter.{iteration}/{self.set['iterations']} with chi2={calc_chi2(*m.values):.3g}  (goodness: {goodness:.3g})'
+                self.callback(report)
+
+            self.nfcn = self.nfcn + m.nfcn
         
         #-------------------
         #End Iterations Loop. Unpack results.      
@@ -309,8 +327,6 @@ class GlobalFit:
         self.residuum = (self.Z_fit-self.Z)
         self.m = m
 
-
-        
         # # =============================================================================
         # # print Results
         # # =============================================================================      
