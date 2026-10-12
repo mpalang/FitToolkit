@@ -14,9 +14,7 @@ from numpy.linalg import inv
 from iminuit import Minuit as Mi
 from collections.abc import Callable
 
-from fittoolkit.utils.tools import (convolve,FitProgress,
-                                    InputParms, FitParms,
-                                    getelements)
+from fittoolkit.utils.tools import (convolve)
 
 default_settings = {   
                 'common_parms': [],
@@ -108,6 +106,8 @@ class GlobalFit:
             raise ValueError('x,y and Z shapes must match')
         if self.bounds:
             pass# TODO: check bounds
+        if self.set['use_irf'] and 'irf' not in self.funs:
+            raise ValueError('IRF usage is enabled but no IRF function was provided in funs.')
 
 
     def initialize(self):
