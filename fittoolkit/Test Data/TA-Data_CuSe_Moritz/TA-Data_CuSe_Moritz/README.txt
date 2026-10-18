@@ -1,1 +1,0 @@
-Figure 5 a und c
