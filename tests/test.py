@@ -9,8 +9,8 @@ import numpy as np
 from matplotlib import pyplot as plt
 from scipy.special import erfc, erfcx
 
-from fittoolkit.utils.tools import convolve
 from fittoolkit import GlobalFit
+from fittoolkit.utils.tools import convolve
 
 
 

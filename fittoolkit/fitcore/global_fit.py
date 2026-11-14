@@ -11,10 +11,10 @@ Z: Data Values as 2D array with shape (len(WL),len(dt))
 from collections.abc import Callable
 
 import numpy as np
-from numpy.linalg import inv
 from iminuit import Minuit as Mi
+from numpy.linalg import inv
 
-from fittoolkit.utils.tools import (convolve)
+from fittoolkit.utils.tools import convolve
 
 #Define default settings here:
 default_settings = {   

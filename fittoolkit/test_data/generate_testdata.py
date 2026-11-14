@@ -5,8 +5,9 @@ Created on Sat Jun 27 10:28:16 2026
 """
 
 import numpy as np
-from scipy.special import erf #TODO: get rid of this dependency
 from numpy.linalg import inv
+from scipy.special import erf #TODO: get rid of this dependency
+
 
 def gauss(x,x0,A,FWHM): #normalized to 1 for IRF
     s=FWHM/(2*np.sqrt(2*np.log(2)))
