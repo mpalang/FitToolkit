@@ -13,7 +13,6 @@ from fittoolkit import GlobalFit
 from fittoolkit.utils.tools import convolve
 
 
-
 def exp_decay(x,x0,A,tau):
     return A*np.exp(-(x-x0)/tau)*np.heaviside(x-x0,1)
 
