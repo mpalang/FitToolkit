@@ -3,10 +3,10 @@ fittoolkit - Scientific fitting and optimization toolkit
 """
 
 # --- Core fitting API ---
-from .fitcore.global_fit import GlobalFit
+from .global_fit import GlobalFit
 
 # --- Version ---
-__version__ = "0.1.0"
+__version__ = "0.2"
 
 # --- Public API definition ---
 __all__ = [

@@ -29,26 +29,28 @@ def exp_decay_conv_gauss(t, t0, A, tau, FWHM):
     return y
 
 
-x = np.linspace(-10, 300, 3000)
-y = np.linspace(300, 800, 1000)
+def generate_test_data():
+    x = np.linspace(-10, 300, 3000)
+    y = np.linspace(300, 800, 1000)
 
-DADS1 = gauss(y, 320, -0.3, 80) + gauss(y, 600, 0.4, 300) + gauss(y, 450, 0.3, 80)
-DADS2 = gauss(y, 320, -0.2, 80) + gauss(y, 400, 0.5, 230) + gauss(y, 700, 0.5, 200)
-DADS3 = gauss(y, 320, -0.5, 80) + gauss(y, 650, 0.3, 400) + gauss(y, 520, 0.03, 100)
+    DADS1 = gauss(y, 320, -0.3, 80) + gauss(y, 600, 0.4, 300) + gauss(y, 450, 0.3, 80)
+    DADS2 = gauss(y, 320, -0.2, 80) + gauss(y, 400, 0.5, 230) + gauss(y, 700, 0.5, 200)
+    DADS3 = gauss(y, 320, -0.5, 80) + gauss(y, 650, 0.3, 400) + gauss(y, 520, 0.03, 100)
 
-D1 = exp_decay(x, -5, 1, 1200)
-D2 = exp_decay(x, -5, 2, 14)
-D3 = exp_decay(x, -5, 0.5, 3000)
+    D1 = exp_decay(x, -5, 1, 1200)
+    D2 = exp_decay(x, -5, 2, 14)
+    D3 = exp_decay(x, -5, 0.5, 3000)
 
-DADS = np.column_stack((DADS1, DADS2, DADS3))
-# DADS = DADS+np.random.uniform(-0.001,0.001,DADS.shape)
-D = np.column_stack((D1, D2, D3))
-D = D + np.random.uniform(-0.01, 0.01, D.shape)
+    DADS = np.column_stack((DADS1, DADS2, DADS3))
+    # DADS = DADS+np.random.uniform(-0.001,0.001,DADS.shape)
+    D = np.column_stack((D1, D2, D3))
+    D = D + np.random.uniform(-0.01, 0.01, D.shape)
 
-Z = DADS @ D.T
+    Z = DADS @ D.T
+
+    return x, y, Z, DADS, D
 
 
-# %
 def make_DADS(Z, D):
     G = D @ D.T
     if np.isclose(np.linalg.det(G), 0):
