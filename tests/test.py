@@ -1,24 +1,17 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Fri Jul 10 10:12:29 2026
-
-@author: morit
-"""
-
-# -*- coding: utf-8 -*-
 """
 Created on Fri Jul  3 19:12:09 2026
 
 @author: morit
 """
 from pathlib import Path
-import sys
-from matplotlib import pyplot as plt
+
 import numpy as np
+from matplotlib import pyplot as plt
+from scipy.special import erfc, erfcx
+
 from fittoolkit.utils.tools import convolve
 from fittoolkit import GlobalFit
-from numpy.linalg import inv
-from iminuit import Minuit as Mi
+
 
 
 def exp_decay(x,x0,A,tau):
@@ -129,8 +122,6 @@ for g in [1]:
 
 #%%
 
-from scipy.special import erfc, erfcx
-
 def exp_decay_conv_gauss(x, x0, A, tau, s):
     """
     Analytical convolution of  A*exp(-(x-x0)/tau)*H(x-x0)  with a unit-area
@@ -159,11 +150,6 @@ def exp_decay_conv_gauss(x, x0, A, tau, s):
 
 def exp_decay(x,x0,A,tau):
     return A*np.exp(-(x-x0)/tau)*np.heaviside(x-x0,1)
-
-def normgauss(x,x0,s):
-    y = 1/(s*np.sqrt(2*np.pi))*np.exp(-(x-x0)**2/(2*s**2))
-    return y/sum(y)
-
 
 x = np.linspace(-10,100,1000)
 

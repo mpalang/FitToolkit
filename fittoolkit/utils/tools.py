@@ -1,13 +1,13 @@
-# -*- coding: utf-8 -*-
 """
 Created on Sun Jul 26 11:11:23 2026
 
 @author: moritzpalang
 """
-
 import numpy as np
-from dataclasses import dataclass
-from collections.abc import Callable
+
+# from collections.abc import Callable
+# from dataclasses import dataclass
+
 
 # =============================================================================
 # Convolute Functions with irf
@@ -55,88 +55,90 @@ def convolve(x, y, irf, edge="edge"):
     return K @ y
 
 
-@dataclass
-class FitProgress:
-    iteration: int
-    total_iterations: int
-    chi2: float
-    parameters: dict
+
+# Check below. I think none of this is used anymore, but I will keep it for now in case we want to use it later.
+# @dataclass
+# class FitProgress:
+#     iteration: int
+#     total_iterations: int
+#     chi2: float
+#     parameters: dict
 
 
-@dataclass
-class InputParms:
-    parms: list[list[str]]
-    p0: list[list[float]]
-    p_lower: list[list[float]]|None=None
-    p_upper: list[list[float]]|None=None
+# @dataclass
+# class InputParms:
+#     parms: list[list[str]]
+#     p0: list[list[float]]
+#     p_lower: list[list[float]]|None=None
+#     p_upper: list[list[float]]|None=None
 
-    common_parms: list[str]|None=None
+#     common_parms: list[str]|None=None
 
-    irf_p0: list[float]|None=None
-    irf_p_lower: list[float]|None=None
-    irf_p_upper: list[float]|None=None
-
-
-def unpack(Parms, P0, P_lower, P_upper, common_parms: list|None=None,
-           irfParms:list|None=None, irfP0:list|None=None, 
-           irfP_lower:list|None=None, irfP_upper:list|None=None):
-
-    fit_parms = []
-    fit_p0 = []
-    fit_p_lower = []
-    fit_p_upper = []
-    p_map = []*len(Parms)
-    common_indices = dict()
-    irf_indices = dict()
-
-    for n in range(len(Parms)):
-        fun_name = 'fun'+str(n+1)+'_'
-        for parm,p0,p_lower,p_upper in zip(Parms[n],P0[n],P_lower[n],P_upper[n]):
-            is_common = (parm in common_parms)
-            index = len(fit_parms)
-            if is_common:
-                if parm in fit_parms:
-                    p_map[n].append(common_indices[parm])
-                else:
-                    fit_parms.append(parm)
-                    fit_p0.append(p0)
-                    fit_p_lower.append(p_lower)
-                    fit_p_upper.append(p_upper)
-                    p_map[n].append(index)
-                    common_indices[name] = index #TODO: watch this and make sure index assignment is correct.
-            else:
-                name = fun_name+name
-                fit_parms.append(name)
-                fit_p0.append(p0)
-                fit_p_lower.append(p_lower)
-                fit_p_upper.append(p_upper)
-                p_map[n].append(index)
-
-    if irfParms:
-        for parm,p0,p_lower,p_upper in zip(irfParms,irfP0,irfP_lower,irfP_upper):
-            is_common = (name in common_parms)
-            if is_common:
-                if name in fit_parms:
-                    irf_indices.append(common_indices[name])
-            else:
-                name = 'irf_'+name
-                fit_parms.append(name)
-                fit_p0.append(p0)
-                fit_p_lower.append(p_lower)
-                fit_p_upper.append(p_upper)  
-
-    return fit_parms, fit_p0, fit_p_lower, fit_p_upper, p_map, common_indices, irf_indices
+#     irf_p0: list[float]|None=None
+#     irf_p_lower: list[float]|None=None
+#     irf_p_upper: list[float]|None=None
 
 
-@dataclass
-class FitParms:
-    input_parms: InputParms
+# def unpack(Parms, P0, P_lower, P_upper, common_parms: list|None=None,
+#            irfParms:list|None=None, irfP0:list|None=None, 
+#            irfP_lower:list|None=None, irfP_upper:list|None=None):
 
-    def __post_init__(self):
-        ip = self.input_parms
-        unpacked = unpack(ip.parms, ip.p0, ip.p_lower, ip.p_upper,ip.common_parms)
-        self.parms, self.p0, self.p_lower, self.p_upper, self.p_map, self.common_indices, self.irf_indices = unpacked
+#     fit_parms = []
+#     fit_p0 = []
+#     fit_p_lower = []
+#     fit_p_upper = []
+#     p_map = []*len(Parms)
+#     common_indices = {}
+#     irf_indices = {}
+
+#     for n in range(len(Parms)):
+#         fun_name = 'fun'+str(n+1)+'_'
+#         for parm,p0,p_lower,p_upper in zip(Parms[n],P0[n],P_lower[n],P_upper[n]):
+#             is_common = (parm in common_parms)
+#             index = len(fit_parms)
+#             if is_common:
+#                 if parm in fit_parms:
+#                     p_map[n].append(common_indices[parm])
+#                 else:
+#                     fit_parms.append(parm)
+#                     fit_p0.append(p0)
+#                     fit_p_lower.append(p_lower)
+#                     fit_p_upper.append(p_upper)
+#                     p_map[n].append(index)
+#                     common_indices[name] = index #TODO: watch this and make sure index assignment is correct.
+#             else:
+#                 name = fun_name+name
+#                 fit_parms.append(name)
+#                 fit_p0.append(p0)
+#                 fit_p_lower.append(p_lower)
+#                 fit_p_upper.append(p_upper)
+#                 p_map[n].append(index)
+
+#     if irfParms:
+#         for parm,p0,p_lower,p_upper in zip(irfParms,irfP0,irfP_lower,irfP_upper):
+#             is_common = (name in common_parms)
+#             if is_common:
+#                 if name in fit_parms:
+#                     irf_indices.append(common_indices[name])
+#             else:
+#                 name = 'irf_'+name
+#                 fit_parms.append(name)
+#                 fit_p0.append(p0)
+#                 fit_p_lower.append(p_lower)
+#                 fit_p_upper.append(p_upper)  
+
+#     return fit_parms, fit_p0, fit_p_lower, fit_p_upper, p_map, common_indices, irf_indices
 
 
-def getelements(L,indices):
-    return [l for n,l in enumerate(L) if n in indices]
+# @dataclass
+# class FitParms:
+#     input_parms: InputParms
+
+#     def __post_init__(self):
+#         ip = self.input_parms
+#         unpacked = unpack(ip.parms, ip.p0, ip.p_lower, ip.p_upper,ip.common_parms)
+#         self.parms, self.p0, self.p_lower, self.p_upper, self.p_map, self.common_indices, self.irf_indices = unpacked
+
+
+# def getelements(L,indices):
+#     return [l for n,l in enumerate(L) if n in indices]

@@ -3,7 +3,7 @@ fittoolkit - Scientific fitting and optimization toolkit
 """
 
 # --- Core fitting API ---
-from .fitcore.GlobalFit import GlobalFit
+from .fitcore.global_fit import GlobalFit
 
 # --- Version ---
 __version__ = "0.1.0"

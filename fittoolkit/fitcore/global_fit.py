@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Created on Thu Jan 19 11:29:24 2023
 
@@ -9,10 +8,11 @@ dt: Delay times 1D array
 Z: Data Values as 2D array with shape (len(WL),len(dt))
 
 """
+from collections.abc import Callable
+
 import numpy as np
 from numpy.linalg import inv
 from iminuit import Minuit as Mi
-from collections.abc import Callable
 
 from fittoolkit.utils.tools import (convolve)
 
@@ -25,7 +25,7 @@ default_settings = {
                 'hesse': False,
                 'tol':None,
                 'errors':None,
-                'strategy':None, # 
+                'strategy':None, #Minuit strategy: 0,1,2. 0=fast, 1=default, 2=robust
                 'iterations':7,
                 'fixed_DADS': False,
                 'scale': False,
@@ -121,12 +121,12 @@ class GlobalFit:
 
     def update_settings(self,**set_update):
         "update settings. Input settings dict keys must match default keys."
-        for key in set_update.keys():
-            if type(set_update[key])==dict:
-                for k in set_update[key]:
-                    self.set[key][k]=set_update[key][k]
+        for key, value in set_update.items():
+            if type(value)==dict:
+                for k in value:
+                    self.set[key][k]=value[k]
             else:
-                self.set[key]=set_update[key]
+                self.set[key]=value
 
         if 'irf' not in [fun.lower() for fun in self.funs]:
             self.set['use_irf'] = False #If no irf was passed, no irf can be used. Maybe add a user info here.
@@ -186,9 +186,10 @@ class GlobalFit:
         "Creates optimized parameters (opt_parms) attribute with original structure."
         self.fit_parms = fit_parms
         self.opt_parms = {}
+
         for fun,parms in self.parms.items():
             self.opt_parms[fun] = {}
-            for name,p in parms.items():
+            for name in parms:
                 if name in self.set['common_parms']:
                     self.opt_parms[fun][name] = fit_parms[name]
                 else:
@@ -220,33 +221,32 @@ class GlobalFit:
             return D
 
         def make_DADS(Z,D):
-            # Try new approach:
-            # return np.linalg.lstsq(D.T, Z.T, rcond=None)[0].T
-            if self.set['fixed_DADS']:
+            if self.set['fixed_DADS'] is not None:
                 return self.set['fixed_DADS']
-            else:
-                G = D@D.T
-                if np.isclose(np.linalg.det(G),0):
-                    G = G+1e-12*np.eye(*G.shape)
-                    DADS=(Z@D.T)@(inv(G))
-                else:
-                    DADS=(Z@D.T)@(inv(G))
-                return DADS
+            G = D@D.T
+            if np.linalg.cond(G) > 1e12:
+                G = G + 1e-12 * np.trace(G) / len(G) * np.eye(len(G))
+            return (Z@D.T)@(inv(G))
+            # Try new approach?:
+            # return np.linalg.lstsq(D.T, Z.T, rcond=None)[0].T
 
         def calc_chi2(*p):
             D = make_D(*p)
-            if not np.isfinite(D).all():
+            if not np.all(np.isfinite(D)):
                 p_str = ', '.join(f'{n}={v:.3g}' for n, v in zip(parm_names, p))
                 self.error_log.append(f'Non-finite D matrix encountered for parameters: {p_str}')
+
             DADS = make_DADS(self.Z,D)
             Zfit = DADS@D
-            _chi2 = np.nansum((self.Z-Zfit)**2)
-            if not np.isfinite(_chi2):
-                self.error_log.append(f'Non-finite chi2 encountered for parameters: {p_str} -> {_chi2:.3g}')
-                return 2*chi2
-            else:
-                chi2 = _chi2
-                return chi2
+
+            mask = np.isfinite(self.Z)
+            r = self.Z-Zfit
+
+            if not np.all(np.isfinite(r[mask])):
+                self.error_log.append(f'Non-finite chi2 encountered for parameters: {p_str} -> {np.sum(r[mask]**2):.3g}')
+                return 1e3 * np.sum(self.Z[mask]**2)  # Use the last valid chi2 value
+
+            return np.sum(r[mask]**2)
         
         # =============================================================================
         # create Minuit object and set fit settings   

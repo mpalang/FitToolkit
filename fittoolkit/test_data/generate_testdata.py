@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Created on Sat Jun 27 10:28:16 2026
 
@@ -6,25 +5,16 @@ Created on Sat Jun 27 10:28:16 2026
 """
 
 import numpy as np
-from matplotlib import pyplot as plt
-from scipy.special import erf
-from scipy.signal import convolve
+from scipy.special import erf #TODO: get rid of this dependency
 from numpy.linalg import inv
-from auxiliary import FitFunctions
-ffed = FitFunctions().funs['exp_decay']
 
 def gauss(x,x0,A,FWHM): #normalized to 1 for IRF
     s=FWHM/(2*np.sqrt(2*np.log(2)))
     y=(1/(np.sqrt(2*np.pi)*s))*np.exp(-((x-x0)**2)/(2*s**2))
     return A*y
 
-def conv(a1,a2,x,mode='full',method='auto'):
-    shift=np.argmax(x>0)-1
-    y=convolve(a1,a2,mode=mode,method=method)[shift:shift+len(x)]
-    return y
-
 def exp_decay(t,t0,A,tau):
-    k=1/tau
+    # k=1/tau
     return A*np.exp(-(t-t0)/tau)*np.heaviside(t-t0,0)
 
 def exp_decay_conv_gauss(t,t0,A,tau,FWHM):
@@ -62,32 +52,4 @@ def make_DADS(Z,D):
     else:
         DADS=(Z@D.T)@(inv(G))
     return DADS
-
-# Check with functions from FitFunctions object
-D1 = ffed.func(x,-5,1,1200)
-D2 = ffed.func(x,-5,2,14)
-D3 = ffed.func(x,-5,0.5,3000)
-D = np.column_stack((D1,D2,D3))
-re_DADS = make_DADS(Z,D.T)
-
-fig,ax = plt.subplots()
-ax.axhline(0,color='k',linewidth=1)
-ax.plot(y,DADS[:,0])
-ax.plot(y,DADS[:,1])
-ax.plot(y,DADS[:,2])
-
-ax.plot(y,re_DADS[:,0],':')
-ax.plot(y,re_DADS[:,1],':')
-ax.plot(y,re_DADS[:,2],':')
-
-
-
-# levels = np.linspace(-0.006,0.004,20)
-# fig,ax = plt.subplots()
-# ax.contourf(y,x,Z.T,levels=levels)
-
-
-# np.savetxt('signal.txt',Z)
-# np.savetxt('t.txt',x)
-# np.savetxt('wl.txt',y)
 
