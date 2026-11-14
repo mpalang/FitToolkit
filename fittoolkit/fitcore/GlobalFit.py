@@ -16,6 +16,7 @@ from collections.abc import Callable
 
 from fittoolkit.utils.tools import (convolve)
 
+#Define default settings here:
 default_settings = {   
                 'common_parms': [],
                 'method': 'Powell', # 'migrad','L-BFGS-B','TNC','COBYLA','SLSQP','trust-constr','CG','Powell','BFGS',
@@ -25,53 +26,49 @@ default_settings = {
                 'tol':None,
                 'errors':None,
                 'strategy':None, # 
-                'print_level':0,
                 'iterations':7,
                 'fixed_DADS': False,
                 'scale': False,
                 'use_irf': False,
             }
 
+
+#Main Global Fit Class:
 class GlobalFit:
     """
-    Creactes global fit Object to fit 2D spectroscopic Data and return DADS.
+    Creates global fit Object to fit 2D spectroscopic Data and return DADS.
     Possible Fit Methods:
         'L-BFGS-B','TNC','COBYLA','SLSQP','trust-constr','CG','Powell','BFGS',
         #Additional Information required: 'trust-krylov','trust-ncg','dogleg','Newton-CG','trust-exact'
     
-    callback: function that handles progres update in form of FitProgress object.
+    callback: function that handles progres update as plain text.
     
     """   
-    # =============================================================================
-    #     Initialize the global_fit object
-    # =============================================================================  
-    
     def __init__(self,
-                 x:np.ndarray, y:np.ndarray, Z:np.ndarray, 
+                 x:np.ndarray, y:np.ndarray, Z:np.ndarray, #required
                  funs:dict[str,Callable], parms:dict[str,dict[str,float]], #required
                  bounds:dict[str,dict[str,(float,float)]]|None=None, #Optional
-                 settings:dict|None = None, name:str="Data", callback:Callable|None=None#Optional
+                 settings:dict|None = None, name:str="Data", callback:Callable|None=None #Optional
                  ):
 
-        self.error_log = []
-        self.nfcn = 0
-
         #Declarations:
-        if callback:
-            self.callback = callback
+        self.callback = callback
+
+        self.error_log = [] #writes a message to the error log if a non-finite value is encountered during the fit.
+        self.nfcn = 0 #counts the number of function calls during the fit.
          
         self.x = x
         self.y = y
         self.Z = Z
-        self.funs = funs
 
+        self.funs = funs
         self.parms = parms
         self.bounds = bounds
-        self.keys_lowercase()
-
+        self.make_keys_lowercase()
+    
         self.initialize()
         if settings:
-            self.set_update(**settings)
+            self.update_settings(**settings)
 
         self.validate()
         self.unpack_parameters()
@@ -91,7 +88,7 @@ class GlobalFit:
         return len(self.funs)
 
     
-    def keys_lowercase(self):
+    def make_keys_lowercase(self):
         no_comps = self.no_comps
         self.funs = {name.lower(): fun for name,fun in self.funs.items()}
         self.parms = {name.lower(): parm for name,parm in self.parms.items()}
@@ -114,7 +111,6 @@ class GlobalFit:
         self.set_defaults()
         self.deviation = 1 #this is just to have a value for deviation before the fit is run. It will be overwritten by the fit function.
         self.D = np.zeros((self.no_comps,len(self.x)))
-
         self.result='No Fit Available'
 
 
@@ -123,7 +119,7 @@ class GlobalFit:
         self.set = default_settings
 
 
-    def set_update(self,**set_update):
+    def update_settings(self,**set_update):
         "update settings. Input settings dict keys must match default keys."
         for key in set_update.keys():
             if type(set_update[key])==dict:
@@ -265,8 +261,6 @@ class GlobalFit:
             m.tol=self.set['tol']
         if self.set['strategy']:
             m.strategy=self.set['strategy']
-        if self.set['print_level']:
-            m.print_level=self.set['print_level']
             
         if self.set['simplex']:
             if self.callback:
@@ -279,13 +273,10 @@ class GlobalFit:
         if self.callback:
             self.callback('start fit')
         
-        self.goodness = [] # create list so you can follow the error throughout the iterations.
-        for iteration in range(self.set['iterations']):
-            #---------------------
-            #Start Iterations  
-            if self.set['print_level']>-1:
-                print(f'Iteration {iteration+1}')
-            
+        self.goodnesses = [] # create list so you can follow the error throughout the iterations.
+        self.chi2s = [] # create list so you can follow the error throughout the iterations.
+        
+        for iteration in range(self.set['iterations']):            
             # =============================================================================
             # Run Fit
             if self.set['method']=='migrad':
@@ -305,12 +296,14 @@ class GlobalFit:
                 raise TypeError(f"non-numeric fit parameters: {bad}")
             D = make_D(*m.values)
             DADS = make_DADS(self.Z,D)
+
             goodness = self.get_goodness(calc_chi2(*m.values))
-            self.goodness.append(goodness)
-            if self.set['print_level']>0:
-                print(f'Goodness of fit: {goodness:.3g}')
+            self.goodnesses.append(goodness)
+            self.chi2s.append(calc_chi2(*m.values))
+
+            #User output:
             if self.callback:
-                report = f'Iter.{iteration}/{self.set['iterations']} with chi2={calc_chi2(*m.values):.3g}  (goodness: {goodness:.3g})'
+                report = f'Iter.{iteration}/{self.set['iterations']} finished with chi2={calc_chi2(*m.values):.3g}  (goodness: {goodness:.3g})'
                 self.callback(report)
 
             self.nfcn = self.nfcn + m.nfcn
