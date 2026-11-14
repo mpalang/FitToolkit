@@ -36,17 +36,17 @@ fittoolkit/
 
 ```python
 import numpy as np
-from fittoolkit.fitcore import GlobalFit  
+from fittoolkit.fitcore import GlobalFit
 
 fit = Fit(
-    x=x,                  # e.g. time axis
-    y=y,                  # e.g. wavelength axis
-    Z=Z,                  # 2D data, shape (len(y), len(x))  # TODO: check
-    p0=[...],             # initial parameter values
+    x=x,  # e.g. time axis
+    y=y,  # e.g. wavelength axis
+    Z=Z,  # 2D data, shape (len(y), len(x))  # TODO: check
+    p0=[...],  # initial parameter values
     funs=["emg(x, x0, A1, tau1, fwhm)"],
-    settings={},          # optional
-    name="Data",          # optional
-    callback=None,        # optional, called during the fit
+    settings={},  # optional
+    name="Data",  # optional
+    callback=None,  # optional, called during the fit
 )
 ```
 

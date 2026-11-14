@@ -3,6 +3,7 @@ Created on Sun Jul 26 11:11:23 2026
 
 @author: moritzpalang
 """
+
 import numpy as np
 
 # from collections.abc import Callable
@@ -23,6 +24,7 @@ import numpy as np
 #     k = len(irf) // 2
 #     return y_conv[k:k + len(y)]
 
+
 def convolve(x, y, irf, edge="edge"):
     """
     Convolve y(x) with irf on an arbitrary, possibly non-uniform grid x.
@@ -39,7 +41,7 @@ def convolve(x, y, irf, edge="edge"):
     if np.any(np.diff(x) <= 0):
         raise ValueError("x must be strictly increasing")
 
-    w = np.empty_like(x)                      # trapezoid weights, non-uniform ok
+    w = np.empty_like(x)  # trapezoid weights, non-uniform ok
     w[1:-1] = (x[2:] - x[:-2]) / 2
     w[0] = (x[1] - x[0]) / 2
     w[-1] = (x[-1] - x[-2]) / 2
@@ -48,12 +50,13 @@ def convolve(x, y, irf, edge="edge"):
     if edge == "edge":
         s = K.sum(axis=1, keepdims=True)
         if np.any(s == 0):
-            raise ValueError("irf has no support on this grid (too narrow for the spacing?)")
+            raise ValueError(
+                "irf has no support on this grid (too narrow for the spacing?)"
+            )
         K = K / s
     elif edge != "zero":
         raise ValueError("edge must be 'edge' or 'zero'")
     return K @ y
-
 
 
 # Check below. I think none of this is used anymore, but I will keep it for now in case we want to use it later.
@@ -80,7 +83,7 @@ def convolve(x, y, irf, edge="edge"):
 
 
 # def unpack(Parms, P0, P_lower, P_upper, common_parms: list|None=None,
-#            irfParms:list|None=None, irfP0:list|None=None, 
+#            irfParms:list|None=None, irfP0:list|None=None,
 #            irfP_lower:list|None=None, irfP_upper:list|None=None):
 
 #     fit_parms = []
@@ -125,7 +128,7 @@ def convolve(x, y, irf, edge="edge"):
 #                 fit_parms.append(name)
 #                 fit_p0.append(p0)
 #                 fit_p_lower.append(p_lower)
-#                 fit_p_upper.append(p_upper)  
+#                 fit_p_upper.append(p_upper)
 
 #     return fit_parms, fit_p0, fit_p_lower, fit_p_upper, p_map, common_indices, irf_indices
 
