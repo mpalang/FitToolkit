@@ -15,7 +15,7 @@ import numpy as np
 from iminuit import Minuit as Mi
 from numpy.linalg import inv
 
-from fittoolkit.utils.tools import convolve
+from fittoolkit.tools import convolve
 
 # Define default settings here:
 default_settings = {
@@ -28,7 +28,7 @@ default_settings = {
     "errors": None,
     "strategy": None,  # Minuit strategy: 0,1,2. 0=fast, 1=default, 2=robust
     "iterations": 7,
-    "fixed_DADS": False,
+    "fixed_DADS": None,
     "scale": False,
     "use_irf": False,
 }
@@ -113,11 +113,17 @@ class GlobalFit:
                 "IRF usage is enabled but no IRF function was provided in funs."
             )
 
+
     def initialize(self):
         self.set_defaults()
         self.deviation = 1  # this is just to have a value for deviation before the fit is run. It will be overwritten by the fit function.
         self.D = np.zeros((self.no_comps, len(self.x)))
         self.result = "No Fit Available"
+
+        self.mask = np.isfinite(self.Z)
+        self.has_nans = not self.mask.all()
+        self.Zsq = np.sum(self.Z[self.mask] ** 2)
+
 
     def set_defaults(self):
         """restores default settings"""
@@ -213,6 +219,8 @@ class GlobalFit:
                     self.opt_parms[fun][name] = fit_parms[name]
                 else:
                     self.opt_parms[fun][name] = fit_parms[f"{fun}_{name}"]
+        
+        return self.opt_parms
 
     # =============================================================================
     # Actual Fit Function
@@ -243,37 +251,43 @@ class GlobalFit:
                     D[n, :] = fun(self.x, *self.get_fun_parms(fun_name, fit_parms))
             return D
 
-        def make_DADS(Z, D):
-            if self.set["fixed_DADS"] is not None:
-                return self.set["fixed_DADS"]
+        def lsq_DADS(Z, D):
+            """Least-squares DADS; also returns Z @ D.T for the fast chi2."""
+            ZDt = Z @ D.T
             G = D @ D.T
             if np.linalg.cond(G) > 1e12:
                 G = G + 1e-12 * np.trace(G) / len(G) * np.eye(len(G))
-            return (Z @ D.T) @ (inv(G))
+            return ZDt @ inv(G), ZDt
+
+        def make_DADS(Z, D):
+            if self.set["fixed_DADS"] is not None:
+                return self.set["fixed_DADS"]
+            return lsq_DADS(Z, D)[0]
             # Try new approach?:
             # return np.linalg.lstsq(D.T, Z.T, rcond=None)[0].T
 
+
         def calc_chi2(*p):
+            def p_str():
+                return ", ".join(f"{n}={v:.3g}" for n, v in zip(parm_names, p))
+
             D = make_D(*p)
-            if not np.all(np.isfinite(D)):
-                p_str = ", ".join(f"{n}={v:.3g}" for n, v in zip(parm_names, p))
-                self.error_log.append(
-                    f"Non-finite D matrix encountered for parameters: {p_str}"
-                )
+            if not np.isfinite(D).all():
+                self.error_log.append(f"Non-finite D matrix for parameters: {p_str()}")
+                return 1e3 * self.Zsq  # penalty
 
             DADS = make_DADS(self.Z, D)
-            Zfit = DADS @ D
+            r = self.Z - DADS @ D
+            if self.has_nans:
+                r = r[self.mask]
+            r = r.ravel()
+            chi2 = r @ r
 
-            mask = np.isfinite(self.Z)
-            r = self.Z - Zfit
+            if not np.isfinite(chi2):
+                self.error_log.append(f"Non-finite chi2 for parameters: {p_str()}")
+                return 1e3 * self.Zsq  # penalty
 
-            if not np.all(np.isfinite(r[mask])):
-                self.error_log.append(
-                    f"Non-finite chi2 encountered for parameters: {p_str} -> {np.sum(r[mask] ** 2):.3g}"
-                )
-                return 1e3 * np.sum(self.Z[mask] ** 2)  # Use the last valid chi2 value
-
-            return np.sum(r[mask] ** 2)
+            return chi2
 
         # =============================================================================
         # create Minuit object and set fit settings
@@ -333,7 +347,7 @@ class GlobalFit:
 
             # User output:
             if self.callback:
-                report = f"Iter.{iteration}/{self.set['iterations']} finished with chi2={calc_chi2(*m.values):.3g}  (goodness: {goodness:.3g})"
+                report = f"Iteration {iteration+1}/{self.set['iterations']} finished with chi2={calc_chi2(*m.values):.3g}  (goodness: {goodness:.3g})"
                 self.callback(report)
 
             self.nfcn = self.nfcn + m.nfcn
@@ -346,9 +360,11 @@ class GlobalFit:
         self.Z_fit = DADS @ D
         if self.set["scale"]:
             self.unscale()
-        self.pack_parameters(fit_parms)
+        self.opt_parms = self.pack_parameters(fit_parms)
         self.residuum = self.Z_fit - self.Z
         self.m = m
+
+        self.result = f"{m.params}\n\n{m.fmin}"
 
         # # =============================================================================
         # # print Results
