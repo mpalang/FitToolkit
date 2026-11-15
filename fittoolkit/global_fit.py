@@ -113,7 +113,6 @@ class GlobalFit:
                 "IRF usage is enabled but no IRF function was provided in funs."
             )
 
-
     def initialize(self):
         self.set_defaults()
         self.deviation = 1  # this is just to have a value for deviation before the fit is run. It will be overwritten by the fit function.
@@ -123,7 +122,6 @@ class GlobalFit:
         self.mask = np.isfinite(self.Z)
         self.has_nans = not self.mask.all()
         self.Zsq = np.sum(self.Z[self.mask] ** 2)
-
 
     def set_defaults(self):
         """restores default settings"""
@@ -219,7 +217,7 @@ class GlobalFit:
                     self.opt_parms[fun][name] = fit_parms[name]
                 else:
                     self.opt_parms[fun][name] = fit_parms[f"{fun}_{name}"]
-        
+
         return self.opt_parms
 
     # =============================================================================
@@ -265,7 +263,6 @@ class GlobalFit:
             return lsq_DADS(Z, D)[0]
             # Try new approach?:
             # return np.linalg.lstsq(D.T, Z.T, rcond=None)[0].T
-
 
         def calc_chi2(*p):
             def p_str():
@@ -347,7 +344,7 @@ class GlobalFit:
 
             # User output:
             if self.callback:
-                report = f"Iteration {iteration+1}/{self.set['iterations']} finished with chi2={calc_chi2(*m.values):.3g}  (goodness: {goodness:.3g})"
+                report = f"Iteration {iteration + 1}/{self.set['iterations']} finished with chi2={calc_chi2(*m.values):.3g}  (goodness: {goodness:.3g})"
                 self.callback(report)
 
             self.nfcn = self.nfcn + m.nfcn

@@ -25,7 +25,7 @@ def exp_decay(t, t0, A, tau):
     return A * np.exp(-(t - t0) / tau) * np.heaviside(t - t0, 0)
 
 
-def edcg(t, t0, A, tau, FWHM): #exponential decay convolved with gauss
+def edcg(t, t0, A, tau, FWHM):  # exponential decay convolved with gauss
     t = t - t0
     s = FWHM / (2 * np.sqrt(2 * np.log(2)))
     y1 = np.exp(s**2 / (2 * tau**2)) * np.exp(-t / tau)
@@ -35,10 +35,12 @@ def edcg(t, t0, A, tau, FWHM): #exponential decay convolved with gauss
 
 
 def generate_test_data(noise_level=0.0):
-    x = np.concatenate([
-            np.arange(-10, 2, 0.05),       # 240 points around x0
-            np.geomspace(2, 10000, 260),   # ~70 per decade, plenty for smooth decays
-        ])
+    x = np.concatenate(
+        [
+            np.arange(-10, 2, 0.05),  # 240 points around x0
+            np.geomspace(2, 10000, 260),  # ~70 per decade, plenty for smooth decays
+        ]
+    )
     y = np.linspace(300, 800, 100)
 
     DADS1 = gauss(y, 320, -0.3, 80) + gauss(y, 600, 0.4, 300) + gauss(y, 450, 0.3, 80)
