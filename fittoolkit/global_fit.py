@@ -185,11 +185,15 @@ class GlobalFit:
     def initialize(self):
         """Initialize fit variables."""
         self.D = np.zeros((self.no_comps, len(self.x)))
+        self.Z_fit = np.zeros(self.Z.shape)
         self.result = "No Fit Available"
 
         self.mask = np.isfinite(self.Z)
         self.has_nans = not self.mask.all()
         self.Zsq = np.sum(self.Z[self.mask] ** 2)
+
+        self.goodnesses = []  # create list so you can follow the error throughout the iterations.
+        self.chi2s = []  # create list so you can follow the error throughout the iterations.
 
 
     def unpack_input(self):
@@ -281,8 +285,11 @@ class GlobalFit:
 
     
 #
-    def get_goodness(self, chi2):
-        return float(chi2 / np.sum(self.Z**2))
+    def get_goodness(self):
+        """Fit quality from 0 to 1, relative to the size of the data (1 = perfect)."""
+        m = self.mask
+        rel = np.sum((self.Z - self.Z_fit)[m] ** 2) / np.sum(self.Z[m] ** 2)
+        return 1 / (1 + rel)
 
 
 
@@ -331,16 +338,9 @@ class GlobalFit:
                 return ", ".join(f"{n}={v:.3g}" for n, v in zip(parm_names, p))
 
             D = make_D(*p)
-            # if not np.isfinite(D).all():
-            #     self.error_log.append(f"Non-finite D matrix for parameters: {p_str()}")
-            #     return 1e3 * self.Zsq  # penalty
-
-            if not np.isfinite(D).all(): # TODO: temporary test
-                bad = ~np.isfinite(D)
-                print("rows:", np.unique(np.where(bad)[0]))
-                print("x:   ", self.x[np.unique(np.where(bad)[1])][:10])
-                print("parms per fun:", {f: self.get_fun_parms(f, dict(zip(parm_names, p))) for f in self.funs})
-                raise SystemExit
+            if not np.isfinite(D).all():
+                self.error_log.append(f"Non-finite D matrix for parameters: {p_str()}")
+                return 1e3 * self.Zsq  # penalty
 
             DADS = make_DADS(self.Z, D)
             r = self.Z - DADS @ D
@@ -382,9 +382,6 @@ class GlobalFit:
         if self.callback:
             self.callback("start fit")
 
-        self.goodnesses = []  # create list so you can follow the error throughout the iterations.
-        self.chi2s = []  # create list so you can follow the error throughout the iterations.
-
         for iteration in range(self.set["iterations"]):
             # =============================================================================
             # Run Fit
@@ -415,13 +412,14 @@ class GlobalFit:
                 )
             DADS = make_DADS(self.Z, D)
 
-            goodness = self.get_goodness(calc_chi2(*m.values))
+            goodness = self.get_goodness()
+            chi2 = calc_chi2(*m.values)
             self.goodnesses.append(goodness)
-            self.chi2s.append(calc_chi2(*m.values))
+            self.chi2s.append(chi2)
 
             # User output:
             if self.callback:
-                report = f"Iteration {iteration + 1}/{self.set['iterations']} finished with chi2={calc_chi2(*m.values):.3g}  (goodness: {goodness:.3g})"
+                report = f"Iteration {iteration + 1}/{self.set['iterations']} finished with chi2={chi2:.3g}  (goodness: {goodness:.3g})"
                 self.callback(report)
 
             self.nfcn = self.nfcn + m.nfcn
