@@ -50,8 +50,12 @@ def convolve(x, y, irf, edge="edge"):
     if edge == "edge":
         s = K.sum(axis=1, keepdims=True)
         if np.any(s == 0):
+            rows = np.where(s.ravel() == 0)[0]
+            d = np.linspace(-100, 100, 4001)
             raise ValueError(
-                "irf has no support on this grid (too narrow for the spacing?)"
+                f"irf has no support on this grid: {len(rows)} rows, "
+                f"e.g. x={x[rows[:3]]}, irf(0)={irf(0.0)}.\n"
+                f"peak at d = {d[np.argmax(irf(d))]}"
             )
         K = K / s
     elif edge != "zero":

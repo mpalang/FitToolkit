@@ -30,20 +30,66 @@ default_settings = {
     "iterations": 7,
     "fixed_DADS": None,
     "scale": False,
-    "use_irf": False,
 }
 
 
 # Main Global Fit Class:
 class GlobalFit:
     """
-    Creates global fit Object to fit 2D spectroscopic Data and return DADS.
-    Possible Fit Methods:
-        'L-BFGS-B','TNC','COBYLA','SLSQP','trust-constr','CG','Powell','BFGS',
-        #Additional Information required: 'trust-krylov','trust-ncg','dogleg','Newton-CG','trust-exact'
+    Global fit of 2D spectroscopic data (e.g. transient absorption).
 
-    callback: function that handles progres update as plain text.
+    The data are modeled as ``Z ≈ DADS @ D``: each kinetic function in ``funs``
+    gives one row of ``D`` (its time dependence), and the decay-associated
+    spectra ``DADS`` are solved linearly at every step. Only the kinetic
+    parameters are optimized. The fit runs on construction.
 
+    Parameters
+    ----------
+    x : np.ndarray
+        Time axis, shape (n_t,). Does not need to be uniformly spaced.
+    y : np.ndarray
+        Spectral axis (e.g. wavelength), shape (n_wl,).
+    Z : np.ndarray
+        Data, shape (n_wl, n_t). NaNs are allowed and excluded from chi².
+    funs : dict[str, Callable]
+        Kinetic functions by name, each called as ``f(x, *parms)`` with the
+        parameters in the order of ``parms[name]``. The reserved name
+        ``"irf"`` is not a component: it is the instrument response, called
+        as ``irf(offset, *parms)`` and used to convolve all other functions.
+    parms : dict[str, dict[str, float]]
+        Start values per function, e.g. ``{"exp1": {"x0": 0, "tau": 10}}``.
+        Use the key ``"irf"`` for the IRF parameters.
+    bounds : dict[str, dict[str, tuple[float, float]]], optional
+        Bounds per function and parameter, same structure as ``parms``.
+        Equal lower and upper bounds fix a parameter.
+    settings : dict, optional
+        Overrides for the default settings, e.g.
+        ``"method"``: "migrad" (default) or a SciPy method
+        ('L-BFGS-B', 'TNC', 'COBYLA', 'SLSQP', 'trust-constr', 'CG', 'Powell', 'BFGS');
+        ``"iterations"``: number of fit iterations;
+        ``"common_parms"``: parameter name(s) shared by all functions, e.g. "x0";
+        ``"hesse"``: compute parameter uncertainties;
+        ``"fixed_DADS"``: use these DADS instead of solving for them.
+    name : str, default "Data"
+        Name of the data set, used in output.
+    callback : Callable, optional
+        Called with progress messages (str).
+
+    Attributes
+    ----------
+    opt_parms : dict[str, dict[str, float]]
+        Fitted parameters, same structure as ``parms``.
+    DADS : np.ndarray
+        Decay-associated spectra, shape (n_wl, n_components). Use this if the spectra are known.
+    chi2s, goodnesses : list[float]
+        Chi² and goodness of fit after each iteration.
+    error_log : list[str]
+        Parameter sets where the model returned non-finite values.
+
+    Raises
+    ------
+    RuntimeError
+        If the fit ends at parameters where the model is non-finite.
     """
 
     def __init__(
@@ -57,9 +103,10 @@ class GlobalFit:
         settings: dict | None = None,
         name: str = "Data",
         callback: Callable | None = None,  # Optional
-    ):
+        ):
 
         # Declarations:
+        self.name = name
         self.callback = callback
 
         self.error_log = []  # writes a message to the error log if a non-finite value is encountered during the fit.
@@ -69,60 +116,32 @@ class GlobalFit:
         self.y = y
         self.Z = Z
 
+        self.irf = None
         self.funs = funs
         self.parms = parms
         self.bounds = bounds
-        self.make_keys_lowercase()
 
-        self.initialize()
+        self.fit_parms = {}
+        self.fit_bounds = {}
+        self.fixed_parms = []
+
+        self.set_defaults()
         if settings:
             self.update_settings(**settings)
-
+        # self.make_keys_lowercase()
         self.validate()
-        self.unpack_parameters()
-
+        self.unpack_input()
         if self.set["scale"]:
             self.scale()
+
+        self.initialize()
 
         self.fit()
 
     # =============================================================================
     # Settings and data wrangling
     # =============================================================================
-
-    @property
-    def no_comps(self):
-        return len(self.funs)
-
-    def make_keys_lowercase(self):
-        no_comps = self.no_comps
-        self.funs = {name.lower(): fun for name, fun in self.funs.items()}
-        self.parms = {name.lower(): parm for name, parm in self.parms.items()}
-        if self.bounds:
-            self.bounds = {name.lower(): bound for name, bound in self.bounds.items()}
-        if self.no_comps != no_comps:
-            raise ValueError("Duplicate Functionname detected!")
-
-    def validate(self):
-        if self.Z.shape != (np.squeeze(self.y.shape), np.squeeze(self.x.shape)):
-            raise ValueError("x,y and Z shapes must match")
-        if self.bounds:
-            pass  # TODO: check bounds
-        if self.set["use_irf"] and "irf" not in self.funs:
-            raise ValueError(
-                "IRF usage is enabled but no IRF function was provided in funs."
-            )
-
-    def initialize(self):
-        self.set_defaults()
-        self.deviation = 1  # this is just to have a value for deviation before the fit is run. It will be overwritten by the fit function.
-        self.D = np.zeros((self.no_comps, len(self.x)))
-        self.result = "No Fit Available"
-
-        self.mask = np.isfinite(self.Z)
-        self.has_nans = not self.mask.all()
-        self.Zsq = np.sum(self.Z[self.mask] ** 2)
-
+ 
     def set_defaults(self):
         """restores default settings"""
         self.set = default_settings
@@ -136,37 +155,104 @@ class GlobalFit:
             else:
                 self.set[key] = value
 
-        if "irf" not in [fun.lower() for fun in self.funs]:
-            self.set["use_irf"] = (
-                False  # If no irf was passed, no irf can be used. Maybe add a user info here.
-            )
 
-    def unpack_parameters(self):
-        self.fit_parms = {}
-        self.fit_bounds = {}
+    def make_keys_lowercase(self):
+        no_comps = len(self.funs)
+        self.funs = {name.lower(): fun for name, fun in self.funs.items()}
+        self.parms = {name.lower(): parm for name, parm in self.parms.items()}
+        if self.bounds:
+            self.bounds = {name.lower(): bound for name, bound in self.bounds.items()}
+        if len(self.funs) != no_comps:
+            raise ValueError("Duplicate Functionname detected!")
 
-        for fun, parms in self.parms.items():
-            for name, p in parms.items():
-                if name in self.set["common_parms"]:
-                    if name in self.fit_parms:
+
+    def validate(self):
+        if self.x.ndim != 1 or self.y.ndim != 1:
+            raise ValueError("x and y must be 1-D")
+        if self.Z.shape != (self.y.size, self.x.size):
+            raise ValueError("Z must have shape (len(y), len(x))")
+        if self.parms.keys() != self.funs.keys():
+            raise ValueError("funs and parms must have the same keys")
+        if self.bounds is not None and self.bounds.keys() != self.parms.keys():
+            raise ValueError("bounds and parms must have the same keys")
+
+
+    @property
+    def no_comps(self):
+        return len(self.funs)
+
+
+    def initialize(self):
+        """Initialize fit variables."""
+        self.D = np.zeros((self.no_comps, len(self.x)))
+        self.result = "No Fit Available"
+
+        self.mask = np.isfinite(self.Z)
+        self.has_nans = not self.mask.all()
+        self.Zsq = np.sum(self.Z[self.mask] ** 2)
+
+
+    def unpack_input(self):
+        """Unpack input functions, parameters and bounds. Also recognize irf by key and separate from the rest."""
+
+        for fun_name, _ in self.funs.items():
+            parms = self.parms[fun_name]
+
+            for parm_name, p in parms.items():
+                if parm_name in self.set["common_parms"]:
+                    if parm_name in self.fit_parms:
                         continue
                     else:
-                        self.fit_parms[name] = p
+                        self.fit_parms[parm_name] = p
                         if self.bounds:
-                            self.fit_bounds[name] = self.bounds[fun][name]
+                            self.fit_bounds[parm_name] = self.bounds[fun_name][parm_name]
+                            if self.bounds[fun_name][parm_name][0]==self.bounds[fun_name][parm_name][1]:
+                                self.fixed_parms.append(parm_name)
                 else:
-                    self.fit_parms[f"{fun}_{name}"] = p
+                    self.fit_parms[f"{fun_name}_{parm_name}"] = p
                     if self.bounds:
-                        self.fit_bounds[f"{fun}_{name}"] = self.bounds[fun][name]
+                        self.fit_bounds[f"{fun_name}_{parm_name}"] = self.bounds[fun_name][parm_name]
+                        if self.bounds[fun_name][parm_name][0]==self.bounds[fun_name][parm_name][1]:
+                            self.fixed_parms.append(f"{fun_name}_{parm_name}")
+
+        self.irf = self.funs.pop("irf", None)
+
+
+    
+    def get_fun_parms(self, fun_name, fit_parms):
+        fun_parms = []
+        for name in self.parms[fun_name]:
+            if name in self.set["common_parms"]:
+                fun_parms.append(fit_parms[name])
+            else:
+                fun_parms.append(fit_parms[f"{fun_name}_{name}"])
+        return fun_parms
+
+
+    def pack_parameters(self, fit_parms):
+        "Creates optimized parameters (opt_parms) attribute with original structure."
+        self.fit_parms = fit_parms
+        self.opt_parms = {}
+
+        for fun, parms in self.parms.items():
+            self.opt_parms[fun] = {}
+            for name in parms:
+                if name in self.set["common_parms"]:
+                    self.opt_parms[fun][name] = fit_parms[name]
+                else:
+                    self.opt_parms[fun][name] = fit_parms[f"{fun}_{name}"]
+
+        return self.opt_parms
+
 
     def get_scaling_factors(self):
-        def get_factor(x):
-            return 10 ** -round(np.log10(abs(x))) if x != 0 else 1
-
-        self.scaling_factors = {
-            name: get_factor(v) for name, v in self.fit_parms.items()
-        }
-
+           def get_factor(x):
+               return 10 ** -round(np.log10(abs(x))) if x != 0 else 1
+   
+           self.scaling_factors = {
+               name: get_factor(v) for name, v in self.fit_parms.items()
+           }
+   
     def scale(self):
         self.fit_parms = {
             name: v * self.scaling_factors[name] for name, v in self.fit_parms.items()
@@ -193,32 +279,12 @@ class GlobalFit:
                 for name, v in self.fit_bounds.items()
             }
 
-    def get_fun_parms(self, fun_name, fit_parms):
-        fun_parms = []
-        for name in self.parms[fun_name]:
-            if name in self.set["common_parms"]:
-                fun_parms.append(fit_parms[name])
-            else:
-                fun_parms.append(fit_parms[f"{fun_name}_{name}"])
-        return fun_parms
-
+    
+#
     def get_goodness(self, chi2):
         return float(chi2 / np.sum(self.Z**2))
 
-    def pack_parameters(self, fit_parms):
-        "Creates optimized parameters (opt_parms) attribute with original structure."
-        self.fit_parms = fit_parms
-        self.opt_parms = {}
 
-        for fun, parms in self.parms.items():
-            self.opt_parms[fun] = {}
-            for name in parms:
-                if name in self.set["common_parms"]:
-                    self.opt_parms[fun][name] = fit_parms[name]
-                else:
-                    self.opt_parms[fun][name] = fit_parms[f"{fun}_{name}"]
-
-        return self.opt_parms
 
     # =============================================================================
     # Actual Fit Function
@@ -235,15 +301,11 @@ class GlobalFit:
         def make_D(*p):
             fit_parms = dict(zip(parm_names, p))
             for n, (fun_name, fun) in enumerate(self.funs.items()):
-                if fun_name == "irf":
-                    continue
-                if self.set["use_irf"]:
-                    D[n, :] = convolve(
-                        self.x,
-                        fun(self.x, *self.get_fun_parms(fun_name, fit_parms)),
-                        lambda x: self.funs["irf"](
-                            x, *self.get_fun_parms("irf", fit_parms)
-                        ),
+                if self.irf:
+                    D[n, :] = convolve(self.x,
+                                       fun(self.x, *self.get_fun_parms(fun_name, fit_parms)),
+                                       lambda x: self.irf(x, *self.get_fun_parms("irf", fit_parms)
+                                    ),
                     )
                 else:
                     D[n, :] = fun(self.x, *self.get_fun_parms(fun_name, fit_parms))
@@ -269,9 +331,16 @@ class GlobalFit:
                 return ", ".join(f"{n}={v:.3g}" for n, v in zip(parm_names, p))
 
             D = make_D(*p)
-            if not np.isfinite(D).all():
-                self.error_log.append(f"Non-finite D matrix for parameters: {p_str()}")
-                return 1e3 * self.Zsq  # penalty
+            # if not np.isfinite(D).all():
+            #     self.error_log.append(f"Non-finite D matrix for parameters: {p_str()}")
+            #     return 1e3 * self.Zsq  # penalty
+
+            if not np.isfinite(D).all(): # TODO: temporary test
+                bad = ~np.isfinite(D)
+                print("rows:", np.unique(np.where(bad)[0]))
+                print("x:   ", self.x[np.unique(np.where(bad)[1])][:10])
+                print("parms per fun:", {f: self.get_fun_parms(f, dict(zip(parm_names, p))) for f in self.funs})
+                raise SystemExit
 
             DADS = make_DADS(self.Z, D)
             r = self.Z - DADS @ D
@@ -293,6 +362,8 @@ class GlobalFit:
         if self.bounds:
             for name, bound in self.fit_bounds.items():
                 m.limits[name] = bound
+        for fp in self.fixed_parms:
+            m.fixed[fp] = True
         if self.set["errors"]:
             m.errors = self.set["errors"]
         if self.set["tol"]:
@@ -336,6 +407,12 @@ class GlobalFit:
             if bad:
                 raise TypeError(f"non-numeric fit parameters: {bad}")
             D = make_D(*m.values)
+            if not np.isfinite(D).all():
+                p_str = ", ".join(f"{n}={v:.3g}" for n, v in fit_parms.items())
+                raise RuntimeError(
+                    f"Fit ended at invalid parameters (non-finite D): {p_str}. "
+                    f"{len(self.error_log)} bad evaluations; see error_log."
+                )
             DADS = make_DADS(self.Z, D)
 
             goodness = self.get_goodness(calc_chi2(*m.values))

@@ -20,7 +20,7 @@ pip install .        # regular install
 pip install -e .     # editable install for development
 ```
 
-Requires Python 3.9–3.13.
+Requires Python 3.10–3.13.
 
 ## Package structure
 

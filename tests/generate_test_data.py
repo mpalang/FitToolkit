@@ -8,57 +8,53 @@ import numpy as np
 from numpy.linalg import inv
 from scipy.special import erf  # TODO: get rid of this dependency
 
-
-def gauss(x, x0, A, FWHM):  # normalized to 1 for IRF
-    s = FWHM / (2 * np.sqrt(2 * np.log(2)))
-    y = (1 / (np.sqrt(2 * np.pi) * s)) * np.exp(-((x - x0) ** 2) / (2 * s**2))
-    return A * y
+from fittoolkit.models import gauss, edcg, exp_decay
 
 
-def normgauss(x, x0, s):
-    y = (s * np.sqrt(2 * np.pi)) * np.exp(-((x - x0) ** 2) / (2 * s**2))
-    return y / max(y)
-
-
-def exp_decay(t, t0, A, tau):
-    # k=1/tau
-    return A * np.exp(-(t - t0) / tau) * np.heaviside(t - t0, 0)
-
-
-def edcg(t, t0, A, tau, FWHM):  # exponential decay convolved with gauss
-    t = t - t0
-    s = FWHM / (2 * np.sqrt(2 * np.log(2)))
-    y1 = np.exp(s**2 / (2 * tau**2)) * np.exp(-t / tau)
-    y2 = erf((t - (s**2 / tau)) / (s * np.sqrt(2)))
-    y = (A / 2) * y1 * (1 + y2)
-    return y
-
-
-def generate_test_data(noise_level=0.0):
+def generate_test_data(t0=-1.2, tau1 = 13, tau2 = 121, tau3 = 3001, FWHM = 0.2, noise_level=0.0):
     x = np.concatenate(
         [
             np.arange(-10, 2, 0.05),  # 240 points around x0
             np.geomspace(2, 10000, 260),  # ~70 per decade, plenty for smooth decays
         ]
     )
+
+
+    true = {
+        "exp1": {"x0": t0, "A": 1, "tau": tau1},
+        "exp2": {"x0": t0, "A": 1, "tau": tau2},
+        "exp3": {"x0": t0, "A": 1, "tau": tau3},
+    }
+
+    if FWHM:
+        for key in true:
+            true[key]["FWHM"] = FWHM
+
+    if FWHM is None:
+        D1 = exp_decay(x, t0, 1, tau1)
+        D2 = exp_decay(x, t0, 1, tau2)
+        D3 = exp_decay(x, t0, 1, tau3)
+    else:
+        D1 = edcg(x, t0, FWHM, 1, tau1)
+        D2 = edcg(x, t0, FWHM, 1, tau2)
+        D3 = edcg(x, t0, FWHM, 1, tau3)
+
+    D = np.column_stack((D1, D2, D3))
+
+    # DADS = DADS+np.random.uniform(-0.001,0.001,DADS.shape)
     y = np.linspace(300, 800, 100)
 
     DADS1 = gauss(y, 320, -0.3, 80) + gauss(y, 600, 0.4, 300) + gauss(y, 450, 0.3, 80)
     DADS2 = gauss(y, 320, -0.2, 80) + gauss(y, 400, 0.5, 230) + gauss(y, 700, 0.5, 200)
     DADS3 = gauss(y, 320, -0.5, 80) + gauss(y, 650, 0.3, 400) + gauss(y, 520, 0.03, 100)
-
-    D1 = edcg(x, -5.21, 1, 13, 0.242)
-    D2 = edcg(x, -5.21, 1, 121, 0.242)
-    D3 = edcg(x, -5.21, 1, 3001, 0.242)
-
     DADS = np.column_stack((DADS1, DADS2, DADS3))
-    # DADS = DADS+np.random.uniform(-0.001,0.001,DADS.shape)
-    D = np.column_stack((D1, D2, D3))
-    D = D + np.random.uniform(-noise_level, noise_level, D.shape)
 
     Z = DADS @ D.T
 
-    return x, y, Z
+    rng = np.random.default_rng(69)                     # e.g. seed=0 as a function argument
+    Z = Z + rng.normal(0, noise_level, Z.shape)
+
+    return x, y, Z, DADS, true
 
 
 def make_DADS(Z, D):
