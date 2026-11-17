@@ -19,3 +19,9 @@ dependencies = [
     "scipy>=1.13",
     "iminuit>=2.31.3",
 ]
+
+[project.optional-dependencies]
+test = ["pytest"]
+
+[tool.setuptools.packages.find]
+include = ["fittoolkit*"]

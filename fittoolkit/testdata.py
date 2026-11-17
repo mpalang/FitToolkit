@@ -6,12 +6,13 @@ Created on Sat Jun 27 10:28:16 2026
 
 import numpy as np
 from numpy.linalg import inv
-from scipy.special import erf  # TODO: get rid of this dependency
 
-from fittoolkit.models import gauss, edcg, exp_decay
+from fittoolkit.models import edcg, exp_decay, gauss
 
 
-def generate_test_data(t0=-1.2, tau1 = 13, tau2 = 121, tau3 = 3001, FWHM = 0.2, noise_level=0.0):
+def generate_test_data(
+    t0=-1.2, tau1=13, tau2=121, tau3=3001, FWHM=0.2, noise_level=0.0
+):
     x = np.concatenate(
         [
             np.arange(-10, 2, 0.05),  # 240 points around x0
@@ -19,16 +20,15 @@ def generate_test_data(t0=-1.2, tau1 = 13, tau2 = 121, tau3 = 3001, FWHM = 0.2, 
         ]
     )
 
-
     true = {
         "exp1": {"x0": t0, "A": 1, "tau": tau1},
         "exp2": {"x0": t0, "A": 1, "tau": tau2},
         "exp3": {"x0": t0, "A": 1, "tau": tau3},
     }
 
-    if FWHM:
-        for key in true:
-            true[key]["FWHM"] = FWHM
+    if FWHM is not None:
+        for value in true.values():
+            value["FWHM"] = FWHM
 
     if FWHM is None:
         D1 = exp_decay(x, t0, 1, tau1)
@@ -51,7 +51,7 @@ def generate_test_data(t0=-1.2, tau1 = 13, tau2 = 121, tau3 = 3001, FWHM = 0.2, 
 
     Z = DADS @ D.T
 
-    rng = np.random.default_rng(69)                     # e.g. seed=0 as a function argument
+    rng = np.random.default_rng(69)  # e.g. seed=0 as a function argument
     Z = Z + rng.normal(0, noise_level, Z.shape)
 
     return x, y, Z, DADS, true

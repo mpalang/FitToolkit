@@ -103,7 +103,7 @@ class GlobalFit:
         settings: dict | None = None,
         name: str = "Data",
         callback: Callable | None = None,  # Optional
-        ):
+    ):
 
         # Declarations:
         self.name = name
@@ -141,7 +141,7 @@ class GlobalFit:
     # =============================================================================
     # Settings and data wrangling
     # =============================================================================
- 
+
     def set_defaults(self):
         """restores default settings"""
         self.set = default_settings
@@ -155,7 +155,6 @@ class GlobalFit:
             else:
                 self.set[key] = value
 
-
     def make_keys_lowercase(self):
         no_comps = len(self.funs)
         self.funs = {name.lower(): fun for name, fun in self.funs.items()}
@@ -164,7 +163,6 @@ class GlobalFit:
             self.bounds = {name.lower(): bound for name, bound in self.bounds.items()}
         if len(self.funs) != no_comps:
             raise ValueError("Duplicate Functionname detected!")
-
 
     def validate(self):
         if self.x.ndim != 1 or self.y.ndim != 1:
@@ -176,11 +174,9 @@ class GlobalFit:
         if self.bounds is not None and self.bounds.keys() != self.parms.keys():
             raise ValueError("bounds and parms must have the same keys")
 
-
     @property
     def no_comps(self):
         return len(self.funs)
-
 
     def initialize(self):
         """Initialize fit variables."""
@@ -195,11 +191,10 @@ class GlobalFit:
         self.goodnesses = []  # create list so you can follow the error throughout the iterations.
         self.chi2s = []  # create list so you can follow the error throughout the iterations.
 
-
     def unpack_input(self):
         """Unpack input functions, parameters and bounds. Also recognize irf by key and separate from the rest."""
 
-        for fun_name, _ in self.funs.items():
+        for fun_name in self.funs:
             parms = self.parms[fun_name]
 
             for parm_name, p in parms.items():
@@ -209,20 +204,28 @@ class GlobalFit:
                     else:
                         self.fit_parms[parm_name] = p
                         if self.bounds:
-                            self.fit_bounds[parm_name] = self.bounds[fun_name][parm_name]
-                            if self.bounds[fun_name][parm_name][0]==self.bounds[fun_name][parm_name][1]:
+                            self.fit_bounds[parm_name] = self.bounds[fun_name][
+                                parm_name
+                            ]
+                            if (
+                                self.bounds[fun_name][parm_name][0]
+                                == self.bounds[fun_name][parm_name][1]
+                            ):
                                 self.fixed_parms.append(parm_name)
                 else:
                     self.fit_parms[f"{fun_name}_{parm_name}"] = p
                     if self.bounds:
-                        self.fit_bounds[f"{fun_name}_{parm_name}"] = self.bounds[fun_name][parm_name]
-                        if self.bounds[fun_name][parm_name][0]==self.bounds[fun_name][parm_name][1]:
+                        self.fit_bounds[f"{fun_name}_{parm_name}"] = self.bounds[
+                            fun_name
+                        ][parm_name]
+                        if (
+                            self.bounds[fun_name][parm_name][0]
+                            == self.bounds[fun_name][parm_name][1]
+                        ):
                             self.fixed_parms.append(f"{fun_name}_{parm_name}")
 
         self.irf = self.funs.pop("irf", None)
 
-
-    
     def get_fun_parms(self, fun_name, fit_parms):
         fun_parms = []
         for name in self.parms[fun_name]:
@@ -231,7 +234,6 @@ class GlobalFit:
             else:
                 fun_parms.append(fit_parms[f"{fun_name}_{name}"])
         return fun_parms
-
 
     def pack_parameters(self, fit_parms):
         "Creates optimized parameters (opt_parms) attribute with original structure."
@@ -248,15 +250,14 @@ class GlobalFit:
 
         return self.opt_parms
 
-
     def get_scaling_factors(self):
-           def get_factor(x):
-               return 10 ** -round(np.log10(abs(x))) if x != 0 else 1
-   
-           self.scaling_factors = {
-               name: get_factor(v) for name, v in self.fit_parms.items()
-           }
-   
+        def get_factor(x):
+            return 10 ** -round(np.log10(abs(x))) if x != 0 else 1
+
+        self.scaling_factors = {
+            name: get_factor(v) for name, v in self.fit_parms.items()
+        }
+
     def scale(self):
         self.fit_parms = {
             name: v * self.scaling_factors[name] for name, v in self.fit_parms.items()
@@ -283,15 +284,11 @@ class GlobalFit:
                 for name, v in self.fit_bounds.items()
             }
 
-    
-#
     def get_goodness(self):
         """Fit quality from 0 to 1, relative to the size of the data (1 = perfect)."""
         m = self.mask
         rel = np.sum((self.Z - self.Z_fit)[m] ** 2) / np.sum(self.Z[m] ** 2)
         return 1 / (1 + rel)
-
-
 
     # =============================================================================
     # Actual Fit Function
@@ -309,10 +306,10 @@ class GlobalFit:
             fit_parms = dict(zip(parm_names, p))
             for n, (fun_name, fun) in enumerate(self.funs.items()):
                 if self.irf:
-                    D[n, :] = convolve(self.x,
-                                       fun(self.x, *self.get_fun_parms(fun_name, fit_parms)),
-                                       lambda x: self.irf(x, *self.get_fun_parms("irf", fit_parms)
-                                    ),
+                    D[n, :] = convolve(
+                        self.x,
+                        fun(self.x, *self.get_fun_parms(fun_name, fit_parms)),
+                        lambda x: self.irf(x, *self.get_fun_parms("irf", fit_parms)),
                     )
                 else:
                     D[n, :] = fun(self.x, *self.get_fun_parms(fun_name, fit_parms))
