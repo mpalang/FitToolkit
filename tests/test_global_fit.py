@@ -3,6 +3,7 @@ Created on Fri Jul  3 19:12:09 2026
 
 @author: morit
 """
+
 import copy
 
 import numpy as np
@@ -78,7 +79,7 @@ def test_no_noise():
         parms_c,
         bounds_c,
         settings={"iterations": 7, "common_parms": cp_c},
-           callback=print
+        callback=print,
     )
     lines = [f"{'fun':6} {'parm':5} {'true':>10} {'fit':>10} {'diff':>10} {'rel':>9}"]
     for fun, true_parms in true.items():
@@ -108,7 +109,7 @@ def test_noise():
         parms_c,
         bounds_c,
         settings={"iterations": 7, "common_parms": cp_c},
-           callback=print
+        callback=print,
     )
     lines = [f"{'fun':6} {'parm':5} {'true':>10} {'fit':>10} {'diff':>10} {'rel':>9}"]
     for fun, true_parms in true.items():
@@ -138,13 +139,18 @@ def test_no_noise_with_irf():
     # local copies
     funs_t, parms_t, bounds_t = copy.deepcopy((funs, parms, bounds))
     funs_t["irf"] = irf
-    parms_t["irf"] = {"FWHM": 1} 
-    bounds_t["irf"] = {"FWHM": (0.05, 2)}     
+    parms_t["irf"] = {"FWHM": 1}
+    bounds_t["irf"] = {"FWHM": (0.05, 2)}
 
     gf = GlobalFit(
-        x, y, Zc, funs_t, parms_t, bounds_t,
+        x,
+        y,
+        Zc,
+        funs_t,
+        parms_t,
+        bounds_t,
         settings={"simplex": True, "iterations": 7, "common_parms": cp},
-        callback = print,
+        callback=print,
     )
 
     lines = [f"{'fun':6} {'parm':5} {'true':>10} {'fit':>10} {'diff':>10} {'rel':>9}"]
