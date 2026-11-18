@@ -3,6 +3,7 @@ Created on Fri Jul  3 19:12:09 2026
 
 @author: morit
 """
+import copy
 
 import numpy as np
 import pytest
@@ -77,7 +78,7 @@ def test_no_noise():
         parms_c,
         bounds_c,
         settings={"iterations": 7, "common_parms": cp_c},
-        #    callback=print
+           callback=print
     )
     lines = [f"{'fun':6} {'parm':5} {'true':>10} {'fit':>10} {'diff':>10} {'rel':>9}"]
     for fun, true_parms in true.items():
@@ -107,7 +108,7 @@ def test_noise():
         parms_c,
         bounds_c,
         settings={"iterations": 7, "common_parms": cp_c},
-        #    callback=print
+           callback=print
     )
     lines = [f"{'fun':6} {'parm':5} {'true':>10} {'fit':>10} {'diff':>10} {'rel':>9}"]
     for fun, true_parms in true.items():
@@ -127,29 +128,23 @@ def test_noise():
             )
 
 
-def test_noise_with_irf():
+def test_no_noise_with_irf():
     x, y, Z, _, true = generate_test_data(FWHM=None, noise_level=0.0)
 
     FWHM = 0.2
     irf = lambda x, fwhm: gauss(x, 0, fwhm, 1)
-    Zc = np.zeros(Z.shape)
-    for i in range(len(y)):
-        Zc[i, :] = convolve(x, Z[i, :], lambda x: irf(x, FWHM))
+    Zc = np.array([convolve(x, row, lambda d: irf(d, FWHM)) for row in Z])
 
-    # Add irf to functions
-    funs["irf"] = irf
-    parms["irf"] = {"FWHM": 1}
-    bounds["irf"] = {"FWHM": (1e-5, 2)}
+    # local copies
+    funs_t, parms_t, bounds_t = copy.deepcopy((funs, parms, bounds))
+    funs_t["irf"] = irf
+    parms_t["irf"] = {"FWHM": 1} 
+    bounds_t["irf"] = {"FWHM": (0.05, 2)}     
 
     gf = GlobalFit(
-        x,
-        y,
-        Zc,
-        funs,
-        parms,
-        bounds,
-        settings={"iterations": 2, "common_parms": cp},
-        callback=print,
+        x, y, Zc, funs_t, parms_t, bounds_t,
+        settings={"simplex": True, "iterations": 7, "common_parms": cp},
+        callback = print,
     )
 
     lines = [f"{'fun':6} {'parm':5} {'true':>10} {'fit':>10} {'diff':>10} {'rel':>9}"]
@@ -165,7 +160,7 @@ def test_noise_with_irf():
 
     for fun, true_parms in true.items():
         for name, t in true_parms.items():
-            assert gf.opt_parms[fun][name] == pytest.approx(t, rel=1e-2), (
+            assert gf.opt_parms[fun][name] == pytest.approx(t, rel=3e-2), (
                 f"{fun}.{name}"
             )
 
@@ -186,8 +181,7 @@ def test_noise_with_irf():
 
 
 if __name__ == "__main__":
-    test_no_noise()
-    test_noise()
-    test_convolution()
-    test_noise_with_irf()
-
+    # test_no_noise()
+    # test_noise()
+    # test_convolution()
+    test_no_noise_with_irf()

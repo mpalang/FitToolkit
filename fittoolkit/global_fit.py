@@ -1,7 +1,7 @@
 """
 Created on Thu Jan 19 11:29:24 2023
 
-@author: work
+@author: Moritz Lang
 
 WL: Wavelength 1D array
 dt: Delay times 1D array
@@ -408,7 +408,7 @@ class GlobalFit:
                     f"{len(self.error_log)} bad evaluations; see error_log."
                 )
             DADS = make_DADS(self.Z, D)
-
+            self.Z_fit = DADS @ D
             goodness = self.get_goodness()
             chi2 = calc_chi2(*m.values)
             self.goodnesses.append(goodness)
